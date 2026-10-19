@@ -4,6 +4,8 @@ const NotificationService = require("./NotificationService");
 const OrderValidator = require("./OrderValidator");
 const DiscountCalculator = require("./discounts/DiscountCalculator");
 const FreightCalculator = require("./FreightCalculator");
+const PaymentProcessor = require("./payments/PaymentProcessor");
+const { PixPayment, CreditCardPayment, BoletoPayment } = require("./payments/PaymentMethods");
 const {
   VipDiscount,
   EmployeeDiscount,
@@ -25,6 +27,11 @@ class OrderService {
       new LargeOrderDiscount()
     ]);
     this.freightCalculator = new FreightCalculator();
+    this.paymentProcessor = new PaymentProcessor({
+      pix: new PixPayment(),
+      credit_card: new CreditCardPayment(),
+      boleto: new BoletoPayment()
+    });
     this.logger = new Logger();
   }
 
@@ -39,22 +46,10 @@ class OrderService {
 
     const freight = this.freightCalculator.calculate(order);
 
-    let paymentFee = 0;
-    let paymentStatus = "pending";
+    const payment = this.paymentProcessor.process(order, subtotal);
 
-    if (order.getPaymentMethod() === "pix") {
-      paymentStatus = "approved";
-      discount += subtotal * 0.03;
-    } else if (order.getPaymentMethod() === "credit_card") {
-      if (order.getInstallments() > 1) {
-        paymentFee = subtotal * 0.025;
-      }
-      paymentStatus = "approved";
-    } else if (order.getPaymentMethod() === "boleto") {
-      paymentStatus = "waiting_payment";
-    } else {
-      throw new Error("Forma de pagamento invalida.");
-    }
+    discount += payment.discount;
+    const paymentFee = payment.fee;
 
     const total = Number((subtotal - discount + freight + paymentFee).toFixed(2));
 
@@ -66,7 +61,7 @@ class OrderService {
       this.productRepository.updateStock(item.getProductId(), item.getQuantity());
     }
 
-    order.setStatus(paymentStatus === "approved" ? "confirmed" : "waiting_payment");
+    order.setStatus(payment.status === "approved" ? "confirmed" : "waiting_payment");
 
     const orderSummary = {
       id: order.getId(),
