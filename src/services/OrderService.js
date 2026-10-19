@@ -1,6 +1,7 @@
 const ProductRepository = require("../repositories/ProductRepository");
 const OrderRepository = require("../repositories/OrderRepository");
 const NotificationService = require("./NotificationService");
+const OrderValidator = require("./OrderValidator");
 const Logger = require("../utils/Logger");
 
 class OrderService {
@@ -8,43 +9,14 @@ class OrderService {
     this.productRepository = new ProductRepository();
     this.orderRepository = new OrderRepository();
     this.notificationService = new NotificationService();
+    this.validator = new OrderValidator(this.productRepository);
     this.logger = new Logger();
   }
 
   process(order) {
     this.logger.info(`Iniciando processamento do pedido ${order.getId()}.`);
 
-    if (!order.getCustomer()) {
-      throw new Error("Cliente obrigatorio.");
-    }
-
-    if (!order.getCustomerEmail() || !order.getCustomerEmail().includes("@")) {
-      throw new Error("E-mail do cliente invalido.");
-    }
-
-    if (!order.getItems() || order.getItems().length === 0) {
-      throw new Error("Pedido sem itens.");
-    }
-
-    for (const item of order.getItems()) {
-      if (!item.getProduct()) {
-        throw new Error("Item sem produto.");
-      }
-
-      if (item.getQuantity() <= 0) {
-        throw new Error("Quantidade invalida.");
-      }
-
-      const product = this.productRepository.findById(item.getProductId());
-
-      if (!product) {
-        throw new Error(`Produto ${item.getProductId()} nao encontrado.`);
-      }
-
-      if (!product.hasStockFor(item.getQuantity())) {
-        throw new Error(`Estoque insuficiente para ${product.getName()}.`);
-      }
-    }
+    this.validator.validate(order);
 
     const subtotal = order.getSubtotal();
 
