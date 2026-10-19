@@ -13,6 +13,7 @@ const {
   LargeOrderDiscount
 } = require("./discounts/DiscountRules");
 const Logger = require("../utils/Logger");
+const OrderPresenter = require("./OrderPresenter");
 
 class OrderService {
   constructor() {
@@ -33,6 +34,7 @@ class OrderService {
       boleto: new BoletoPayment()
     });
     this.logger = new Logger();
+    this.presenter = new OrderPresenter();
   }
 
   process(order) {
@@ -63,7 +65,23 @@ class OrderService {
 
     order.setStatus(payment.status === "approved" ? "confirmed" : "waiting_payment");
 
-    const orderSummary = {
+    const orderSummary = this.buildSummary(order, { subtotal, discount, freight, paymentFee, total });
+
+    this.orderRepository.save(orderSummary);
+
+    if (order.getStatus() === "confirmed") {
+      this.notificationService.sendOrderConfirmation(order.getCustomer(), order.getId(), total);
+    } else {
+      this.logger.warn(`Pedido ${order.getId()} aguardando pagamento.`);
+    }
+
+    this.presenter.print(orderSummary);
+
+    return orderSummary;
+  }
+
+  buildSummary(order, { subtotal, discount, freight, paymentFee, total }) {
+    return {
       id: order.getId(),
       customerName: order.getCustomerName(),
       customerEmail: order.getCustomerEmail(),
@@ -84,26 +102,6 @@ class OrderService {
       status: order.getStatus(),
       createdAt: order.getCreatedAt()
     };
-
-    this.orderRepository.save(orderSummary);
-
-    if (order.getStatus() === "confirmed") {
-      this.notificationService.sendOrderConfirmation(order.getCustomer(), order.getId(), total);
-    } else {
-      this.logger.warn(`Pedido ${order.getId()} aguardando pagamento.`);
-    }
-
-    console.log("Resumo do pedido");
-    console.log(`Cliente: ${order.getCustomerName()}`);
-    console.log(`Cidade: ${order.getCustomerCity()}/${order.getCustomerState()}`);
-    console.log(`Itens: ${order.getTotalItems()}`);
-    console.log(`Subtotal: R$ ${subtotal.toFixed(2)}`);
-    console.log(`Desconto: R$ ${discount.toFixed(2)}`);
-    console.log(`Frete: R$ ${freight.toFixed(2)}`);
-    console.log(`Taxas: R$ ${paymentFee.toFixed(2)}`);
-    console.log(`Total: R$ ${total.toFixed(2)}`);
-
-    return orderSummary;
   }
 }
 
