@@ -1,40 +1,24 @@
-const ProductRepository = require("../repositories/ProductRepository");
-const OrderRepository = require("../repositories/OrderRepository");
-const NotificationService = require("./NotificationService");
-const OrderValidator = require("./OrderValidator");
-const DiscountCalculator = require("./discounts/DiscountCalculator");
-const FreightCalculator = require("./FreightCalculator");
-const PaymentProcessor = require("./payments/PaymentProcessor");
-const { PixPayment, CreditCardPayment, BoletoPayment } = require("./payments/PaymentMethods");
-const {
-  VipDiscount,
-  EmployeeDiscount,
-  Tech10CouponDiscount,
-  LargeOrderDiscount
-} = require("./discounts/DiscountRules");
-const Logger = require("../utils/Logger");
-const OrderPresenter = require("./OrderPresenter");
-
 class OrderService {
-  constructor() {
-    this.productRepository = new ProductRepository();
-    this.orderRepository = new OrderRepository();
-    this.notificationService = new NotificationService();
-    this.validator = new OrderValidator(this.productRepository);
-    this.discountCalculator = new DiscountCalculator([
-      new VipDiscount(),
-      new EmployeeDiscount(),
-      new Tech10CouponDiscount(),
-      new LargeOrderDiscount()
-    ]);
-    this.freightCalculator = new FreightCalculator();
-    this.paymentProcessor = new PaymentProcessor({
-      pix: new PixPayment(),
-      credit_card: new CreditCardPayment(),
-      boleto: new BoletoPayment()
-    });
-    this.logger = new Logger();
-    this.presenter = new OrderPresenter();
+  constructor({
+    productRepository,
+    orderRepository,
+    notificationService,
+    validator,
+    discountCalculator,
+    freightCalculator,
+    paymentProcessor,
+    logger,
+    presenter
+  }) {
+    this.productRepository = productRepository;
+    this.orderRepository = orderRepository;
+    this.notificationService = notificationService;
+    this.validator = validator;
+    this.discountCalculator = discountCalculator;
+    this.freightCalculator = freightCalculator;
+    this.paymentProcessor = paymentProcessor;
+    this.logger = logger;
+    this.presenter = presenter;
   }
 
   process(order) {
@@ -52,7 +36,6 @@ class OrderService {
 
     discount += payment.discount;
     const paymentFee = payment.fee;
-
     const total = Number((subtotal - discount + freight + paymentFee).toFixed(2));
 
     if (total <= 0) {
