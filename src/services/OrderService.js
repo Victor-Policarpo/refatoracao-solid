@@ -3,6 +3,7 @@ const OrderRepository = require("../repositories/OrderRepository");
 const NotificationService = require("./NotificationService");
 const OrderValidator = require("./OrderValidator");
 const DiscountCalculator = require("./discounts/DiscountCalculator");
+const FreightCalculator = require("./FreightCalculator");
 const {
   VipDiscount,
   EmployeeDiscount,
@@ -23,6 +24,7 @@ class OrderService {
       new Tech10CouponDiscount(),
       new LargeOrderDiscount()
     ]);
+    this.freightCalculator = new FreightCalculator();
     this.logger = new Logger();
   }
 
@@ -35,27 +37,7 @@ class OrderService {
 
     let discount = this.discountCalculator.calculate(order, subtotal);
 
-    const totalWeight = order.getTotalWeight();
-
-    let freight = 0;
-
-    if (order.getShippingRegion() === "sudeste") {
-      freight = 20 + totalWeight * 4;
-    } else if (order.getShippingRegion() === "sul") {
-      freight = 28 + totalWeight * 5;
-    } else if (order.getShippingRegion() === "centro-oeste") {
-      freight = 35 + totalWeight * 6;
-    } else if (order.getShippingRegion() === "nordeste") {
-      freight = 45 + totalWeight * 7;
-    } else if (order.getShippingRegion() === "norte") {
-      freight = 60 + totalWeight * 9;
-    } else {
-      freight = 50 + totalWeight * 8;
-    }
-
-    if (order.hasFreeShippingCoupon()) {
-      freight = 0;
-    }
+    const freight = this.freightCalculator.calculate(order);
 
     let paymentFee = 0;
     let paymentStatus = "pending";
