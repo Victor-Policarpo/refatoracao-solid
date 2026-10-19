@@ -2,6 +2,13 @@ const ProductRepository = require("../repositories/ProductRepository");
 const OrderRepository = require("../repositories/OrderRepository");
 const NotificationService = require("./NotificationService");
 const OrderValidator = require("./OrderValidator");
+const DiscountCalculator = require("./discounts/DiscountCalculator");
+const {
+  VipDiscount,
+  EmployeeDiscount,
+  Tech10CouponDiscount,
+  LargeOrderDiscount
+} = require("./discounts/DiscountRules");
 const Logger = require("../utils/Logger");
 
 class OrderService {
@@ -10,6 +17,12 @@ class OrderService {
     this.orderRepository = new OrderRepository();
     this.notificationService = new NotificationService();
     this.validator = new OrderValidator(this.productRepository);
+    this.discountCalculator = new DiscountCalculator([
+      new VipDiscount(),
+      new EmployeeDiscount(),
+      new Tech10CouponDiscount(),
+      new LargeOrderDiscount()
+    ]);
     this.logger = new Logger();
   }
 
@@ -20,27 +33,7 @@ class OrderService {
 
     const subtotal = order.getSubtotal();
 
-    let discount = 0;
-
-    if (order.isCustomerVip()) {
-      discount += subtotal * 0.08;
-    }
-
-    if (order.isCustomerEmployee()) {
-      discount += subtotal * 0.15;
-    }
-
-    if (order.hasCoupon("TECH10")) {
-      discount += subtotal * 0.1;
-    }
-
-    if (order.hasCoupon("FRETEGRATIS")) {
-      discount += 0;
-    }
-
-    if (subtotal > 8000) {
-      discount += 250;
-    }
+    let discount = this.discountCalculator.calculate(order, subtotal);
 
     const totalWeight = order.getTotalWeight();
 
