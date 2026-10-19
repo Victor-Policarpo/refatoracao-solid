@@ -12,61 +12,57 @@ class OrderService {
   }
 
   process(order) {
-    this.logger.info(`Iniciando processamento do pedido ${order.id}.`);
+    this.logger.info(`Iniciando processamento do pedido ${order.getId()}.`);
 
-    if (!order.customer) {
+    if (!order.getCustomer()) {
       throw new Error("Cliente obrigatorio.");
     }
 
-    if (!order.customer.email || !order.customer.email.includes("@")) {
+    if (!order.getCustomerEmail() || !order.getCustomerEmail().includes("@")) {
       throw new Error("E-mail do cliente invalido.");
     }
 
-    if (!order.items || order.items.length === 0) {
+    if (!order.getItems() || order.getItems().length === 0) {
       throw new Error("Pedido sem itens.");
     }
 
-    for (const item of order.items) {
-      if (!item.product) {
+    for (const item of order.getItems()) {
+      if (!item.getProduct()) {
         throw new Error("Item sem produto.");
       }
 
-      if (item.quantity <= 0) {
+      if (item.getQuantity() <= 0) {
         throw new Error("Quantidade invalida.");
       }
 
-      const product = this.productRepository.findById(item.product.id);
+      const product = this.productRepository.findById(item.getProductId());
 
       if (!product) {
-        throw new Error(`Produto ${item.product.id} nao encontrado.`);
+        throw new Error(`Produto ${item.getProductId()} nao encontrado.`);
       }
 
-      if (product.stock < item.quantity) {
-        throw new Error(`Estoque insuficiente para ${product.name}.`);
+      if (!product.hasStockFor(item.getQuantity())) {
+        throw new Error(`Estoque insuficiente para ${product.getName()}.`);
       }
     }
 
-    let subtotal = 0;
-
-    for (const item of order.items) {
-      subtotal += item.product.price * item.quantity;
-    }
+    const subtotal = order.getSubtotal();
 
     let discount = 0;
 
-    if (order.customer.type === "vip") {
+    if (order.isCustomerVip()) {
       discount += subtotal * 0.08;
     }
 
-    if (order.customer.type === "employee") {
+    if (order.isCustomerEmployee()) {
       discount += subtotal * 0.15;
     }
 
-    if (order.couponCode === "TECH10") {
+    if (order.hasCoupon("TECH10")) {
       discount += subtotal * 0.1;
     }
 
-    if (order.couponCode === "FRETEGRATIS") {
+    if (order.hasCoupon("FRETEGRATIS")) {
       discount += 0;
     }
 
@@ -74,44 +70,40 @@ class OrderService {
       discount += 250;
     }
 
-    let totalWeight = 0;
-
-    for (const item of order.items) {
-      totalWeight += item.product.weight * item.quantity;
-    }
+    const totalWeight = order.getTotalWeight();
 
     let freight = 0;
 
-    if (order.customer.address.region === "sudeste") {
+    if (order.getShippingRegion() === "sudeste") {
       freight = 20 + totalWeight * 4;
-    } else if (order.customer.address.region === "sul") {
+    } else if (order.getShippingRegion() === "sul") {
       freight = 28 + totalWeight * 5;
-    } else if (order.customer.address.region === "centro-oeste") {
+    } else if (order.getShippingRegion() === "centro-oeste") {
       freight = 35 + totalWeight * 6;
-    } else if (order.customer.address.region === "nordeste") {
+    } else if (order.getShippingRegion() === "nordeste") {
       freight = 45 + totalWeight * 7;
-    } else if (order.customer.address.region === "norte") {
+    } else if (order.getShippingRegion() === "norte") {
       freight = 60 + totalWeight * 9;
     } else {
       freight = 50 + totalWeight * 8;
     }
 
-    if (order.couponCode === "FRETEGRATIS") {
+    if (order.hasFreeShippingCoupon()) {
       freight = 0;
     }
 
     let paymentFee = 0;
     let paymentStatus = "pending";
 
-    if (order.paymentMethod === "pix") {
+    if (order.getPaymentMethod() === "pix") {
       paymentStatus = "approved";
       discount += subtotal * 0.03;
-    } else if (order.paymentMethod === "credit_card") {
-      if (order.installments > 1) {
+    } else if (order.getPaymentMethod() === "credit_card") {
+      if (order.getInstallments() > 1) {
         paymentFee = subtotal * 0.025;
       }
       paymentStatus = "approved";
-    } else if (order.paymentMethod === "boleto") {
+    } else if (order.getPaymentMethod() === "boleto") {
       paymentStatus = "waiting_payment";
     } else {
       throw new Error("Forma de pagamento invalida.");
@@ -123,22 +115,22 @@ class OrderService {
       throw new Error("Total do pedido invalido.");
     }
 
-    for (const item of order.items) {
-      this.productRepository.updateStock(item.product.id, item.quantity);
+    for (const item of order.getItems()) {
+      this.productRepository.updateStock(item.getProductId(), item.getQuantity());
     }
 
-    order.status = paymentStatus === "approved" ? "confirmed" : "waiting_payment";
+    order.setStatus(paymentStatus === "approved" ? "confirmed" : "waiting_payment");
 
     const orderSummary = {
-      id: order.id,
-      customerName: order.customer.name,
-      customerEmail: order.customer.email,
-      city: order.customer.address.city,
-      state: order.customer.address.state,
-      items: order.items.map((item) => ({
-        productId: item.product.id,
-        name: item.product.name,
-        quantity: item.quantity,
+      id: order.getId(),
+      customerName: order.getCustomerName(),
+      customerEmail: order.getCustomerEmail(),
+      city: order.getCustomerCity(),
+      state: order.getCustomerState(),
+      items: order.getItems().map((item) => ({
+        productId: item.getProductId(),
+        name: item.getProductName(),
+        quantity: item.getQuantity(),
         subtotal: item.getSubtotal()
       })),
       subtotal,
@@ -146,22 +138,22 @@ class OrderService {
       freight: Number(freight.toFixed(2)),
       paymentFee: Number(paymentFee.toFixed(2)),
       total,
-      paymentMethod: order.paymentMethod,
-      status: order.status,
-      createdAt: order.createdAt
+      paymentMethod: order.getPaymentMethod(),
+      status: order.getStatus(),
+      createdAt: order.getCreatedAt()
     };
 
     this.orderRepository.save(orderSummary);
 
-    if (order.status === "confirmed") {
-      this.notificationService.sendOrderConfirmation(order.customer, order.id, total);
+    if (order.getStatus() === "confirmed") {
+      this.notificationService.sendOrderConfirmation(order.getCustomer(), order.getId(), total);
     } else {
-      this.logger.warn(`Pedido ${order.id} aguardando pagamento.`);
+      this.logger.warn(`Pedido ${order.getId()} aguardando pagamento.`);
     }
 
     console.log("Resumo do pedido");
-    console.log(`Cliente: ${order.customer.name}`);
-    console.log(`Cidade: ${order.customer.address.city}/${order.customer.address.state}`);
+    console.log(`Cliente: ${order.getCustomerName()}`);
+    console.log(`Cidade: ${order.getCustomerCity()}/${order.getCustomerState()}`);
     console.log(`Itens: ${order.getTotalItems()}`);
     console.log(`Subtotal: R$ ${subtotal.toFixed(2)}`);
     console.log(`Desconto: R$ ${discount.toFixed(2)}`);
